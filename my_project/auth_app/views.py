@@ -1,4 +1,6 @@
 from django.shortcuts import render
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import CreateView
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, OpenApiResponse
@@ -14,7 +16,7 @@ from auth_app.serializers import UserSerializer
 
 # Create your views here.
 
-
+@method_decorator(csrf_exempt, name='dispatch')
 class CreateUserAPIView(APIView):
     @extend_schema(
         summary='Create new user',
@@ -36,4 +38,19 @@ class CreateUserAPIView(APIView):
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
+
+class UserAPIListView(APIView):
+    @extend_schema(
+        summary='List users',
+        description='Shows full list of successfully created users with their full information ',
+        responses= {
+            200: UserSerializer,
+        }
+    )
+    def get(self,request):
+        users = UserModel.objects.all()
+        serializer = UserSerializer(users, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
