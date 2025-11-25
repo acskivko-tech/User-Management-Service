@@ -6,7 +6,7 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, OpenApiResponse
 from rest_framework import status
 from rest_framework.generics import CreateAPIView
-from rest_framework.permissions import AllowAny, IsAdminUser
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -60,6 +60,52 @@ class UserAPIListView(APIView):
         serializer = UserSerializer(users, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+class GetCurrentUserAPIView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    @extend_schema(
+        summary='Get current user',
+        description=(
+                "Retrieves information about the currently authenticated user.\n\n"
+                "Behavior:\n"
+                "- Returns full user profile.\n"
+                "- Requires the user to be authenticated."
+        ),
+        responses={
+            200: OpenApiResponse(UserSerializer, description='Current user retrieved successfully.'),
+            401: OpenApiResponse(OpenApiTypes.OBJECT, description='User not authenticated'),
+        }
+    )
+    def get(self,request):
+        serializer = UserSerializer(request.user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class GetIDUserAPIView(APIView):
+    permission_classes = (IsAdminUser,)
+
+    @extend_schema(
+        summary='Get user by ID',
+        description=(
+                "Retrieves information of a specific user by their ID.\n\n"
+                "Behavior:\n"
+                "- Only admin users can access this endpoint.\n"
+                "- Returns full user profile for the requested user ID.\n"
+                "- If user with provided ID does not exist, returns 404."
+        ),
+        responses={
+            200: OpenApiResponse(UserSerializer, description='User retrieved successfully.'),
+            401: OpenApiResponse(OpenApiTypes.OBJECT, description='User not authenticated'),
+            403: OpenApiResponse(OpenApiTypes.OBJECT, description='User does not have permission'),
+            404: OpenApiResponse(OpenApiTypes.OBJECT, description='User not found'),
+        }
+    )
+    def get(self,request,pk):
+        try:
+            user = UserModel.objects.get(pk=pk)
+        except UserModel.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        serializer = UserSerializer(user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class CurrentUserUpdateAPIView(APIView):
