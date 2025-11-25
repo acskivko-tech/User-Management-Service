@@ -6,7 +6,7 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, OpenApiResponse
 from rest_framework import status
 from rest_framework.generics import CreateAPIView
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -45,12 +45,77 @@ class CreateUserAPIView(APIView):
 class UserAPIListView(APIView):
     @extend_schema(
         summary='List users',
-        description='Shows full list of successfully created users with their full information ',
-        responses= {
-            200: UserSerializer,
+        description=(
+                "Returns a list of all registered users with their full information.\n\n"
+                "Behavior:\n"
+                "- Shows only existing users.\n"
+                "- Each user is serialized using the standard UserSerializer."
+        ),
+        responses={
+            200: OpenApiResponse(UserSerializer(many=True), description='List of users returned successfully.')
         }
     )
     def get(self,request):
         users = UserModel.objects.all()
         serializer = UserSerializer(users, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+
+class CurrentUserUpdateAPIView(APIView):
+    @extend_schema(
+        summary='Update current user',
+        description=(
+            "Updates the profile information of the currently authenticated user.\n\n"
+            "Behavior:\n"
+            "- Only the fields provided in the request will be updated.\n"
+            "- Fields not included in the request remain unchanged.\n"
+            "- Password is not updated here (only profile fields).\n"
+        ),
+        request=UserSerializer,
+        responses={
+            200: OpenApiResponse(UserSerializer, description='User updated successfully.'),
+            400: OpenApiResponse(OpenApiTypes.OBJECT, description='Validation error'),
+            401: OpenApiResponse(OpenApiTypes.OBJECT, description='User not authenticated'),
+        }
+    )
+
+    def put(self, request):
+        user = request.user
+        serializer = UserSerializer(user, data=request.data,partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class IDUserAPIUpdateView(APIView):
+    permission_classes = (IsAdminUser,)
+    @extend_schema(
+        summary='Update user by ID (admin only)',
+        description=(
+            "Allows an administrator to update any user's profile using their ID.\n\n"
+            "Behavior:\n"
+            "- Only the fields provided will be updated.\n"
+            "- If the user does not exist, a 404 error is returned.\n"
+            "- Password is not updated here (profile fields only)."
+        ),
+        request=UserSerializer,
+        responses={
+            200: OpenApiResponse(UserSerializer, description='User updated successfully.'),
+            400: OpenApiResponse(OpenApiTypes.OBJECT, description='Validation error'),
+            401: OpenApiResponse(OpenApiTypes.OBJECT, description='Authentication required'),
+            403: OpenApiResponse(OpenApiTypes.OBJECT, description='Admin privileges required'),
+            404: OpenApiResponse(OpenApiTypes.OBJECT, description='User not found'),
+        }
+    )
+    def put(self,request,pk):
+        try:
+            user = UserModel.objects.get(pk=pk)
+        except UserModel.DoesNotExist:
+             return Response({'detail':"User was not found"},status=status.HTTP_404_NOT_FOUND)
+        serializer = UserSerializer(user,data=request.data,partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
